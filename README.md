@@ -26,7 +26,10 @@ docker push fra.ocir.io/$TENANT/$REPOSITORY:$VERSION
 
 ## Deploying on Oracle Kubernetes Engine (OKE)
 
-To deploy the database on a OKE kluster you could use kubectl apply -f k8s_fullapex_deploy.yaml
+To deploy the database on a OKE kluster you could use 
+~~~
+kubectl apply -f k8s_fullapex_deploy.yaml 
+~~~
 
 ### k8s_fullapex_deploy.yaml
 This creates a Persistant volume claim on a Filesystem that should already be present

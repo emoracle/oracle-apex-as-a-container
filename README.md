@@ -1,6 +1,8 @@
 # oracle-apex-as-a-container
 An Oracle Free DB with Oracle APEX installed an with ORDS listening on 8080 in one container
 
+Standing on the shoulders of https://pretius.com/blog/oracle-apex-docker-ords/
+
 ## Creating a running container
 
 ### maak_container_free.sh

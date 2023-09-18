@@ -34,7 +34,6 @@ It creates a deployment and so a pod as instantiation of the image
 It creates a CLusterIP service on port 1521 (database) and 8080 (ords)
 
 
-# Developed on:
-WSL2
-
-Docker-Desktop
+*### Developed on:*
+*WSL2. *
+*Docker-Desktop*

@@ -18,11 +18,11 @@ You can push this to an Oracle Container Registry in OCI.
 Here I use frankfurt (fra.ocir.io)
 
 The running container should be committed and tagged with the proper tag
-
+~~~
 docker commit $CONTAINER_NAME fra.ocir.io/$TENANT/$REPOSITORY:$VERSION
 docker login fra.ocir.io
-
 docker push fra.ocir.io/$TENANT/$REPOSITORY:$VERSION
+~~~
 
 ## Deploying on Oracle Kubernetes Engine (OKE)
 
@@ -34,6 +34,6 @@ It creates a deployment and so a pod as instantiation of the image
 It creates a CLusterIP service on port 1521 (database) and 8080 (ords)
 
 
-*### Developed on:*
-*WSL2. *
+### Developed on:
+*WSL2*
 *Docker-Desktop*

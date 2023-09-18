@@ -12,8 +12,8 @@ This bash-file
 The resulting container has a working Oracle APEX installation running on http://localhost:8080
 
 ## Pushing to the repository
-I am working with Oracle Container Registry in OCI. 
-Here I use frankfurt.
+You can push this to an Oracle Container Registry in OCI. 
+Here I use frankfurt (fra.ocir.io)
 
 The running container should be committed and tagged with the proper tag
 
@@ -21,6 +21,15 @@ docker commit $CONTAINER_NAME fra.ocir.io/$TENANT/$REPOSITORY:$VERSION
 docker login fra.ocir.io
 
 docker push fra.ocir.io/$TENANT/$REPOSITORY:$VERSION
+
+## Deploying on Oracle Kubernetes Engine (OKE)
+
+To deploy the database on a OKE kluster you could use
+### k8s_apex_deploy.yaml
+This creates a Persistant volume claim on a Filesystem that should already be present
+It creates a deployment and so a pod as instantiation of the image
+It creates a CLusterIP service on port 1521 (database) and 8080 (ords)
+
 
 # Developed on:
 WSL2

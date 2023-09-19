@@ -12,6 +12,13 @@ This bash-file
 - installs the latest ORDS software on the container
 
 The resulting container has a working Oracle APEX installation running on http://localhost:8080
+The initial password for the ADMIN user on the INTERNAL workspace is set to Welcome_1.
+I recommend opening a terminal to the container and 
+~~~
+cd apex
+sqlplus / as sysdba
+@apxchpwd
+~~
 
 ## Pushing to the repository
 You can push this to an Oracle Container Registry in OCI. 

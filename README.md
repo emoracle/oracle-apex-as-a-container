@@ -18,8 +18,7 @@ I recommend opening a terminal to the container and
 cd apex
 sqlplus / as sysdba
 @apxchpwd
-~~
-
+~~~
 
 ## Pushing to the repository
 You can push this to an Oracle Container Registry in OCI. 

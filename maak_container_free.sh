@@ -12,7 +12,9 @@ CONTAINER_NAME=${CONTAINER_NAME}         # De naam van de container
 SYS_PWD=${SYS_PWD}                       # Wachtwoord van de db users
 REGISTRY_USER=${REGISTRY_USER}           # Accountnaam voor container-registry.oracle.com. Moet in een environvariabele staan ( export REGISTRY_USER="")
 REGISTRY_PWD=${REGISTRY_PWD}             # Bijbehorende wachtwoord. Moet ook in de environment staan
-PDB_NAAM="FREEPDB1"
+
+PDB_NAAM="FREEPDB1"                      # Naam van de PDB
+ADMIN_PWD="Welcome_1"                    # Het wachtwoord van de admin-user van APEX
 
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
@@ -74,6 +76,96 @@ else
   exit" | sqlplus / as sysdba
 fi 
 
+EOF
+
+# Verander het wachtwoord van de ADMIN user
+docker exec -i $CONTAINER_NAME bash << EOF
+
+cd apex
+
+echo "ALTER SESSION SET CONTAINER = $PDB_NAAM;
+@@core/scripts/set_appun.sql
+
+alter session set current_schema = &APPUN;
+
+col user_id       noprint new_value M_USER_ID
+col email_address noprint new_value M_EMAIL_ADDRESS
+set termout off
+select rtrim(min(user_id))                        as user_id
+,      nvl ( rtrim(min(email_address)), 'ADMIN' ) as email_address
+from   wwv_flow_fnd_user
+where  security_group_id = 10
+and    user_name         = 'ADMIN'
+/
+set termout on
+begin
+  if length('&M_USER_ID.') > 0 
+  then
+    sys.dbms_output.put_line('User "ADMIN" exists.');
+  else
+    sys.dbms_output.put_line('User "ADMIN" does not yet exist and will be created.');
+  end if;
+end;
+/
+
+variable PASSWORD varchar2(128)
+
+create or replace procedure wwv_flow_assign_pwd 
+  ( p_dest out varchar2
+  , p_src  in  varchar2 
+  )
+is
+begin
+  p_dest := p_src;
+end wwv_flow_assign_pwd;
+/
+
+alter session set cursor_sharing=force;
+
+call wwv_flow_assign_pwd(:PASSWORD,'$ADMIN_PWD');
+
+alter session set cursor_sharing=exact;
+
+drop procedure wwv_flow_assign_pwd;
+
+declare
+  c_user_id  constant number         := to_number( '&M_USER_ID.' );
+  c_username constant varchar2(4000) := 'ADMIN';
+  c_email    constant varchar2(4000) := 'a@b.nl';
+  c_password constant varchar2(4000) := :PASSWORD;
+
+  c_old_sgid constant number := wwv_flow_security.g_security_group_id;
+  c_old_user constant varchar2(255) := wwv_flow_security.g_user;
+
+  procedure cleanup
+  is
+  begin
+    wwv_flow_security.g_security_group_id := c_old_sgid;
+    wwv_flow_security.g_user              := c_old_user;
+  end cleanup;
+begin
+  wwv_flow_security.g_security_group_id := 10;
+  wwv_flow_security.g_user              := c_username;
+
+  wwv_flow_fnd_user_int.create_or_update_user
+    ( p_user_id  => c_user_id
+    , p_username => c_username
+    , p_email    => c_email
+    , p_password => c_password 
+    );
+
+  commit;
+  cleanup();
+exception
+  when others 
+  then
+    cleanup();
+    raise;
+end;
+/
+
+exit
+" | sqlplus / as sysdba
 EOF
 
 # Installeren van ORDS. DIt is inherent herstartbaar
@@ -170,6 +262,14 @@ sudo sh /home/oracle/scripts/start_ords.sh
 
 EOF
 EOFMAIN
+
+# We ruimen de boel op 
+
+docker exec -i $CONTAINER_NAME bash << EOF
+
+rm apex-latest.zip
+
+EOF
 
 docker restart $CONTAINER_NAME
 

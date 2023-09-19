@@ -20,6 +20,7 @@ sqlplus / as sysdba
 @apxchpwd
 ~~
 
+
 ## Pushing to the repository
 You can push this to an Oracle Container Registry in OCI. 
 Here I use frankfurt (fra.ocir.io)

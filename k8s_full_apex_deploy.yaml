@@ -47,6 +47,9 @@ spec:
       containers:
         - image: #Image name #
           name:  apex-img
+          env:
+          - name: ORACLE_SID
+            value: "FREE"
           ports:
             - containerPort: 1521
               name: port-1521
@@ -55,11 +58,7 @@ spec:
           volumeMounts:
             - name: oradata
               mountPath: /opt/oracle/oradata
-              subPath: oradata
-          volumeMounts:
-            - name: oradata
-              mountPath: /opt/oracle/cfgtoollogs/
-              subPath: cfgtoollogs
+              subPath: oradata          
       volumes:
         - name: oradata
           persistentVolumeClaim:

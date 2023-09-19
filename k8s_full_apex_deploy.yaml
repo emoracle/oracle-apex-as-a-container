@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: db-pv
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  csi:
+    driver: fss.csi.oraclecloud.com
+    volumeHandle: #OCI Volumehandle of the FSS#
+
+---
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-pvc
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName : ""
+  resources:
+    requests:
+      storage: 20Gi
+  volumeName: db-pv
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: apex-deploy
+spec:
+  selector:
+    matchLabels:
+      app: apex-ords 
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: apex-ords
+    spec:
+      containers:
+        - image: #Image name #
+          name:  apex-img
+          ports:
+            - containerPort: 1521
+              name: port-1521
+            - containerPort: 8080
+              name: port-8080
+          volumeMounts:
+            - name: oradata
+              mountPath: /opt/oracle/oradata
+              subPath: oradata
+          volumeMounts:
+            - name: oradata
+              mountPath: /opt/oracle/cfgtoollogs/
+              subPath: cfgtoollogs
+      volumes:
+        - name: oradata
+          persistentVolumeClaim:
+            claimName: db-pvc
+      imagePullSecrets: 
+        - name: #Secret to pull from Oracle Container Registry#
+    
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: apex-svc 
+spec:
+  type: ClusterIP
+  ports:
+    - name: port-1521
+      port: 1521
+      protocol: TCP
+      targetPort: 1521
+    - name: port-8080
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app: apex-ords
+

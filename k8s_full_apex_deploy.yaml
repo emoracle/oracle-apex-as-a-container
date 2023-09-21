@@ -1,35 +1,5 @@
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: db-pv
-spec:
-  capacity:
-    storage: 20Gi
-  volumeMode: Filesystem
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  csi:
-    driver: fss.csi.oraclecloud.com
-    volumeHandle: #OCI Volumehandle of the FSS#
-
----
-
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: db-pvc
-spec:
-  accessModes:
-    - ReadWriteMany
-  storageClassName : ""
-  resources:
-    requests:
-      storage: 20Gi
-  volumeName: db-pv
-
----
-
+# I leave the creation of the PVC to the reader
+# Follow the docs
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -44,28 +14,50 @@ spec:
       labels:
         app: apex-ords
     spec:
+      initContainers:
+      - name: initcopy
+        image: #image name #
+        command: 
+        - sh
+        - -c
+        - | 
+          if [ ! -d "/mnt/myoradata" ] || [ ! "$(ls -A /mnt/moradata)" ]; then
+            mv /opt/oracle/oradata /mnt/myoradata
+          fi
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: oradatavolume
+          mountPath: /mnt
+      
+      - name: setpermissies
+        image: busybox
+        command: ["chmod", "-R", "777", "/mnt/myoradata"]
+        securityContext:
+          runAsUser: 0
+        volumeMounts:
+        - name: oradatavolume
+          mountPath: /mnt
+
+      # De hoofdcontainer
       containers:
-        - image: #Image name #
-          name:  apex-img
-          env:
-          - name: ORACLE_SID
-            value: "FREE"
+        - name: apex-img
+          image: # image name #
           ports:
             - containerPort: 1521
               name: port-1521
             - containerPort: 8080
               name: port-8080
           volumeMounts:
-            - name: oradata
+            - name: oradatavolume
               mountPath: /opt/oracle/oradata
-              subPath: oradata          
+              subPath: myoradata
       volumes:
-        - name: oradata
+        - name: oradatavolume
           persistentVolumeClaim:
             claimName: db-pvc
       imagePullSecrets: 
-        - name: #Secret to pull from Oracle Container Registry#
-    
+        - name: ocigeheim
 ---
 
 apiVersion: v1

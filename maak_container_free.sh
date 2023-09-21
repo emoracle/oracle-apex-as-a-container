@@ -235,12 +235,6 @@ export _JAVA_OPTIONS="-Xms512M -Xmx512M"
 LOGFILE=/home/oracle/logs/ords-`date +"%Y""%m""%d"`.log
 
 nohup ${ORDS_HOME} --config /etc/ords/config serve --apex-images /home/oracle/software/apex/images >> $LOGFILE 2>&1 & echo "View log file with : tail -f $LOGFILE"
-docker exec -i $CONTAINER_NAME bash << EOFMAIN
-cat > /home/oracle/scripts/stop_ords.sh << 'EOF'
-
-kill `ps -ef | grep [o]rds.war | awk '{print $2}'`
-
-EOF
 
 EOFMAIN
 
@@ -276,6 +270,10 @@ docker restart $CONTAINER_NAME
 echo "Klaar met het aanmaken van een container"
 echo "Controleer met http://localhost:8080/ords"
 
+# Wacht even 15 seconden
+
+sleep 15
+
 HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/ords/_/landing)
 
 if [ "$HTTP_STATUS" -eq 200 ]; then
@@ -283,4 +281,3 @@ if [ "$HTTP_STATUS" -eq 200 ]; then
 else
     echo "De URL is niet bereikbaar. HTTP status code: $HTTP_STATUS"
 fi
-

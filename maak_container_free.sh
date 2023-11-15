@@ -3,6 +3,7 @@
 # Auteur       : H.E. van Meerendonk
 # Creation date: 01-09-2023
 # Revisie      : 
+# 15-11-2023 Controleer of Docker draait
 
 #-------------------------------------------------------------------------------------------------------------
 # Configuratie
@@ -10,35 +11,52 @@
 
 CONTAINER_NAME=${CONTAINER_NAME}         # De naam van de container
 SYS_PWD=${SYS_PWD}                       # Wachtwoord van de db users
-REGISTRY_USER=${REGISTRY_USER}           # Accountnaam voor container-registry.oracle.com. Moet in een environvariabele staan ( export REGISTRY_USER="")
+REGISTRY_USER=${REGISTRY_USER}           # Accountnaam voor container-registry.oracle.com. Moet in een environvariabele staan (export REGISTRY_USER="")
 REGISTRY_PWD=${REGISTRY_PWD}             # Bijbehorende wachtwoord. Moet ook in de environment staan
 
 PDB_NAAM="FREEPDB1"                      # Naam van de PDB
-ADMIN_PWD="Welcome_1"                    # Het wachtwoord van de admin-user van APEX
+ADMIN_PWD=${ADMIN_PWD}                   # Het wachtwoord van de admin-user van APEX
 
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
 #-------------------------------------------------------------------------------------------------------------
 
+# Controleer of docker aan staat
+
+if ! docker info > /dev/null 2>&1; then
+  echo "ERROR: Docker draait niet. Start Docker en probeer opnieuw."
+  exit 1
+fi
+
 # Controleer op environment variabelen
+
+if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
+  echo "ERROR: Omgevingsvariabelen zijn niet gezet. Het script stopt."
+  exit 1
+fi
+
+# Controleer op environment variabelen
+
 if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
   echo "ERROR: Omgevingsvariabelen zijn niet gezet. Het script stopt." 
   exit 1
 fi
 
 # Inloggen in de Reporitory van Oracle
+
 docker login container-registry.oracle.com --username $REGISTRY_USER --password $REGISTRY_PWD
 
-#We halen de laatste data base op
+#We halen de laatste database op
+
 docker pull container-registry.oracle.com/database/free:latest
 
 # We starten de container en check op beschikbaarheid
 
 if ! docker ps --filter "name=$CONTAINER_NAME" --filter "status=running"| grep -w $CONTAINER_NAME > /dev/null; then
-    echo "Container $CONTAINER_NAME is not running. Starting it now..."
-    docker run -d -it --name $CONTAINER_NAME -p 1521:1521 -p 5500:5500 -p 8080:8080 -p 8443:8443 -e ORACLE_PWD=$SYS_PWD container-registry.oracle.com/database/free:latest
+  echo "Container $CONTAINER_NAME is not running. Starting it now..."
+  docker run -d -it --name $CONTAINER_NAME -p 1521:1521 -p 5500:5500 -p 8080:8080 -p 8443:8443 -e ORACLE_PWD=$SYS_PWD container-registry.oracle.com/database/free:latest
 else
-    echo "Container $CONTAINER_NAME is already running."
+  echo "Container $CONTAINER_NAME is already running."
 fi
 
 COUNTER=0
@@ -58,6 +76,7 @@ done
 # Installeren van APEX
 
 # Open een shell op de image
+
 docker exec -i $CONTAINER_NAME bash << EOF
 
 if [ -d "/home/oracle/apex" ]; then
@@ -79,6 +98,7 @@ fi
 EOF
 
 # Verander het wachtwoord van de ADMIN user
+
 docker exec -i $CONTAINER_NAME bash << EOF
 
 cd apex
@@ -168,7 +188,7 @@ exit
 " | sqlplus / as sysdba
 EOF
 
-# Installeren van ORDS. DIt is inherent herstartbaar
+# Installeren van ORDS. Dit is inherent herstartbaar
 
 docker exec -i $CONTAINER_NAME bash << EOF
 mkdir -p /home/oracle/software
@@ -236,6 +256,7 @@ LOGFILE=/home/oracle/logs/ords-`date +"%Y""%m""%d"`.log
 
 nohup ${ORDS_HOME} --config /etc/ords/config serve --apex-images /home/oracle/software/apex/images >> $LOGFILE 2>&1 & echo "View log file with : tail -f $LOGFILE"
 
+EOF
 EOFMAIN
 
 # We maken een stopscript 
@@ -249,6 +270,7 @@ EOF
 EOFMAIN
 
 # We maken een autostart
+
 docker exec -i $CONTAINER_NAME bash << EOFMAIN
 cat >  /opt/oracle/scripts/startup/01_auto_ords.sh << EOF
 
@@ -259,9 +281,11 @@ EOFMAIN
 
 # We ruimen de boel op 
 
-docker exec -i $CONTAINER_NAME bash << EOF
+docker exec -i $CONTAINER_NAME bash << 'EOF'
 
 rm apex-latest.zip
+
+$ORACLE_HOME/bin/oraversion -compositeVersion > /opt/oracle/oradata/version.txt
 
 EOF
 
@@ -278,6 +302,8 @@ HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/ords/
 
 if [ "$HTTP_STATUS" -eq 200 ]; then
     echo "De URL is bereikbaar. "
+    echo "Het SYS wachtwoord voor deze container is $SYS_PWD"
+    echo "Het wachtwoord binnen APEX is $ADMIN_PWD"
 else
     echo "De URL is niet bereikbaar. HTTP status code: $HTTP_STATUS"
 fi

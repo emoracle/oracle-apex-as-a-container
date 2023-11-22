@@ -1,9 +1,13 @@
-# PRE         : Er dienen environment variabelen REGISTRY_USER en REGISTRY_PWD en SYS_PWD te bestaan
-#               om te connecteren naar container-registry.oracle.com en als ww binnen de image
+# PRE          : Er dienen environment variabelen REGISTRY_USER en REGISTRY_PWD en SYS_PWD te bestaan
+#                om te connecteren naar container-registry.oracle.com en als ww binnen de image
 # Auteur       : H.E. van Meerendonk
 # Creation date: 01-09-2023
 # Revisie      : 
 # 15-11-2023 Controleer of Docker draait
+# 21-11-2023 Aanbrengen dynamische hook zodat via een init.sql script een applicatie met objecten
+#            gelijk aangebracht kan worden.
+#            Backticks vervangen door $()
+#            Weggooien via rm -rf
 
 #-------------------------------------------------------------------------------------------------------------
 # Configuratie
@@ -97,7 +101,27 @@ fi
 
 EOF
 
+init_dir="./init"
+init_sql="$init_dir/init.sql"
+
+if [ ! -d "$init_dir" ]; then
+   # Hook directory bestaat niet, we maken hem aan
+    mkdir -p "$init_dir"
+    echo "Created directory $init_dir."
+fi
+
+if [ ! -f "$init_sql" ]; then
+    # Hook bestand bestaat niet. We maken een dummy aan
+    echo "select sysdate from dual;" > "$init_sql"
+    echo "Created $init_sql with default content."
+fi
+
+#copieer alles uit init directory naar de container
+
+docker cp ./init/ $CONTAINER_NAME:/home/oracle/init/
+
 # Verander het wachtwoord van de ADMIN user
+# en start de hook op
 
 docker exec -i $CONTAINER_NAME bash << EOF
 
@@ -184,23 +208,26 @@ exception
 end;
 /
 
+Prompt Start het root-script init.sql
+
+@/home/oracle/init/init.sql
+
 exit
 " | sqlplus / as sysdba
+
+
 EOF
 
 # Installeren van ORDS. Dit is inherent herstartbaar
 
 docker exec -i $CONTAINER_NAME bash << EOF
-mkdir -p /home/oracle/software
-mkdir -p /home/oracle/software/apex
-mkdir -p /home/oracle/software/ords
 mkdir -p /home/oracle/scripts
-
-cp -r /home/oracle/apex/images /home/oracle/software/apex
 
 cd /home/oracle/
 
 su
+
+rm -rf /home/oracle/init
 
 dnf update
 
@@ -252,9 +279,9 @@ cat > /home/oracle/scripts/start_ords.sh << 'EOF'
 export ORDS_HOME=/usr/local/bin/ords
 export _JAVA_OPTIONS="-Xms512M -Xmx512M"
 
-LOGFILE=/home/oracle/logs/ords-`date +"%Y""%m""%d"`.log
+LOGFILE=/home/oracle/logs/ords-$(date +"%Y%m%d").log
 
-nohup ${ORDS_HOME} --config /etc/ords/config serve --apex-images /home/oracle/software/apex/images >> $LOGFILE 2>&1 & echo "View log file with : tail -f $LOGFILE"
+nohup ${ORDS_HOME} --config /etc/ords/config serve --apex-images /home/oracle/apex/images >> $LOGFILE 2>&1 & echo "View log file with : tail -f $LOGFILE"
 
 EOF
 EOFMAIN
@@ -264,7 +291,7 @@ EOFMAIN
 docker exec -i $CONTAINER_NAME bash << 'EOFMAIN' 
 cat > /home/oracle/scripts/stop_ords.sh << 'EOF'
 
-kill `ps -ef | grep [o]rds.war | awk '{print $2}'`
+kill $(ps -ef | grep [o]rds.war | awk '{print $2}')
 
 EOF
 EOFMAIN
@@ -282,6 +309,7 @@ EOFMAIN
 # We ruimen de boel op 
 
 docker exec -i $CONTAINER_NAME bash << 'EOF'
+su 
 
 rm apex-latest.zip
 
@@ -294,9 +322,9 @@ docker restart $CONTAINER_NAME
 echo "Klaar met het aanmaken van een container"
 echo "Controleer met http://localhost:8080/ords"
 
-# Wacht even 15 seconden
+# Wacht even 
 
-sleep 15
+sleep 20
 
 HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/ords/_/landing)
 

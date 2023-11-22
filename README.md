@@ -34,13 +34,13 @@ docker push fra.ocir.io/$TENANT/$REPOSITORY:$VERSION
 
 ## Deploying on Oracle Kubernetes Engine (OKE)
 
-To deploy the database on a OKE kluster you could use 
+To deploy the image as a pod on a OKE kluster you could use 
 ~~~
 kubectl apply -f k8s_fullapex_deploy.yaml 
 ~~~
 
 ### k8s_fullapex_deploy.yaml
-This creates a Persistant volume claim on a Filesystem that should already be present
+This creates a Persistant Volume Claim on a Filesystem that should already be present
 It creates a deployment and so a pod as instantiation of the image
 It creates a CLusterIP service on port 1521 (database) and 8080 (ords)
 

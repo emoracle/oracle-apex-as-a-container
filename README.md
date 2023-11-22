@@ -9,6 +9,7 @@ Standing on the shoulders of https://pretius.com/blog/oracle-apex-docker-ords/
 This bash-file 
 - pulls and instantiate the latest Oracle Free DB from container-registry.oracle.com
 - installs the latest APEX installation on the container
+- installs your sql-statements (e.g. for creating a user, workspace e.a.)
 - installs the latest ORDS software on the container
 
 The resulting container has a working Oracle APEX installation running on http://localhost:8080

@@ -1,6 +1,6 @@
 export REGISTRY_USER="vanmeerendonk@gmail.com"
-export REGISTRY_PWD="Ocp4505pin"
-export SYS_PWD="JuvaDBSYS123##"
+export REGISTRY_PWD="*******"
+export SYS_PWD="*****##"
 export CONTAINER_NAME="ems-an-db"
 export ADMIN_PWD="Welcome_1"
 

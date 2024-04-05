@@ -1,0 +1,22 @@
+# Ignore compiled files
+*.o
+*.out
+
+# Ignore dependencies
+/node_modules
+/vendor
+
+# Ignore logs and temporary files
+*.log
+*.tmp
+
+# Ignore IDE and editor specific files
+.vscode/
+.idea/
+
+# Ignore build artifacts
+/build
+/dist
+
+# Ignore start_container.sh
+start_container.sh

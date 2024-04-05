@@ -1,4 +1,4 @@
-# Oracle Database Container Deployment Script
+# Oracle Database Container Deployment Script 
 
 This script automates the deployment and configuration of an Oracle Database container, including the setup of Oracle Application Express (APEX) and Oracle REST Data Services (ORDS), ensuring a quick start for development or testing purposes.
 

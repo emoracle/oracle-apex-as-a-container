@@ -19,4 +19,4 @@
 /dist
 
 # Ignore start_container.sh
-start_container.sh
+startContainer.sh

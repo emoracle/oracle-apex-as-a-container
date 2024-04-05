@@ -10,7 +10,7 @@ echo "commit $CONTAINER_NAME naar fra.ocir.io/juva2oca/$REPOSITORY:$VERSIE"
 docker commit $CONTAINER_NAME fra.ocir.io/juva2oca/$REPOSITORY:$VERSIE
 
 echo "login naar de repository"
-docker login fra.ocir.io -u "juva2oca/DevOps-OCI" -p "t6y05L+L3P8CAHw:rPo)"
+docker login fra.ocir.io -u "juva2oca/*****" -p "****"
 
 echo "push naar de repository"
 docker pull fra.ocir.io/juva2oca/$REPOSITORY:$VERSIE

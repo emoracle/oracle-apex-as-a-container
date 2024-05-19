@@ -39,6 +39,7 @@ This script automates the deployment and configuration of an Oracle Database con
 - Ensure Docker is running before executing the script.
 - Verify all required environment variables are correctly set.
 - Check Docker and script logs for any error messages if the container fails to start or APEX/ORDS setup does not complete.
+- /etc/yum/vars/ociregion file is deleted from yum an recreated empty to force dnf/yum to go to yum.oracle.com
 
 ## Contributing
 

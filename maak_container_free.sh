@@ -344,7 +344,6 @@ if [ "$HTTP_STATUS" -eq 200 ]; then
     echo "The URL can be reached. "
     echo "The SYS password for this container is $SYS_PWD"
     echo "The password within APEX is $ADMIN_PWD"
-    echo "The workspace is TESTWS"
 else
     echo "The URL can not be reached. HTTP status code: $HTTP_STATUS"
 fi

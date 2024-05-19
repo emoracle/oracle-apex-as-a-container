@@ -11,6 +11,8 @@ This script automates the deployment and configuration of an Oracle Database con
   - `SYS_PWD`: The SYS user password for the Oracle database.
   - `CONTAINER_NAME`: The name you wish to assign to your Oracle database container.
   - `ADMIN_PWD`: The admin user password for Oracle APEX.
+  - `INSTALL_APEX`: APEX must be installed (TRUE) or not (FALSE)
+  - `INSTALL_ORDS`: ORDS must be installed (TRUE) or not (FALSE). APEX installation is a prerequisite.
 
 ## Features
 

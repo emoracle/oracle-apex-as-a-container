@@ -11,7 +11,7 @@
 # 19-05-2024 Clearing ociregions: -us-phoenix is not responding
 
 #-------------------------------------------------------------------------------------------------------------
-# Configuratie
+# Configuration
 #-------------------------------------------------------------------------------------------------------------
 
 CONTAINER_NAME=${CONTAINER_NAME}         # The name of the container
@@ -22,8 +22,8 @@ REGISTRY_PWD=${REGISTRY_PWD}             # Password of the registry. Must be in 
 PDB_NAAM="FREEPDB1"                      # Name of the PDB
 ADMIN_PWD=${ADMIN_PWD}                   # The passowrd of the admin-user within APEX
 
-INSTALLEER_APEX="TRUE"                   # Install APEX
-INSTALLEER_ORDS="TRUE"                   # Install ORDS
+INSTALLEER_APEX=${INSTALL_APEX}          # Install APEX
+INSTALLEER_ORDS=${INSTALL_ORDS}          # Install ORDS
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
 #-------------------------------------------------------------------------------------------------------------
@@ -31,14 +31,14 @@ INSTALLEER_ORDS="TRUE"                   # Install ORDS
 # Check of Docker is running
 
 if ! docker info > /dev/null 2>&1; then
-  echo "ERROR: Docker draait niet. Start Docker en probeer opnieuw."
+  echo "ERROR: Docker is not running. Start Docker and try again."
   exit 1
 fi
 
 # Check on environment variables
 
 if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
-  echo "ERROR: Omgevingsvariabelen zijn niet gezet. Het script stopt."
+  echo "ERROR: Encironment variables REGISTRY_USER, SYS_PWD and CONTAINER_NAME must be set."
   exit 1
 fi
 
@@ -75,7 +75,7 @@ done
  
 # Installing APEX
 if [ "$INSTALLEER_APEX" = "FALSE" ]; then
-  echo "We installeren geen APEX en ORDS"
+  echo "We DO NOT install APEX and ORDS."
   exit 0
 fi
 
@@ -111,7 +111,7 @@ if [ ! -d "$init_dir" ]; then
 fi
 
 if [ ! -f "$init_sql" ]; then
-    # Hook file does not exist. We create it
+    # Hook file does not exist. We create it. 
     echo "select sysdate from dual;" > "$init_sql"
     echo "Created $init_sql with default content."
 fi
@@ -221,7 +221,7 @@ EOF
 # Installing ORDS
 
 if [ "$INSTALLEER_ORDS" = "FALSE" ]; then
-  echo "We installeren geen ORDS."
+  echo "ORDS is not being installed."
   exit 0;
 fi 
  
@@ -246,7 +246,7 @@ dnf update
 dnf install sudo -y
 
 if sudo grep -q "^oracle[[:space:]]" /etc/sudoers || sudo grep -q "^oracle[[:space:]]" /etc/sudoers.d/*; then
-    echo "User oracle heeft al sudo privileges."
+    echo "User oracle already has sudo privileges."
 else
     echo "oracle ALL=(ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers
 fi

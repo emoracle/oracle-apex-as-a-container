@@ -1,56 +1,52 @@
-# PRE          : Er dienen environment variabelen REGISTRY_USER en REGISTRY_PWD en SYS_PWD te bestaan
-#                om te connecteren naar container-registry.oracle.com en als ww binnen de image
+# PRE          : Environment variables REGISTRY_USER and REGISTRY_PWD and SYS_PWD must exist
+#                to connect to container-registry.oracle.com and as the password within the image
 # Auteur       : H.E. van Meerendonk
 # Creation date: 01-09-2023
 # Revisie      : 
-# 15-11-2023 Controleer of Docker draait
-# 21-11-2023 Aanbrengen dynamische hook zodat via een init.sql script een applicatie met objecten
-#            gelijk aangebracht kan worden.
-#            Backticks vervangen door $()
-#            Weggooien via rm -rf
+# 15-11-2023 Check if docker is running
+# 21-11-2023 Applying dynamic hook so that an application with objects can be created using an init.sql script.
+#            Replacing backticks with $()
+#            Deleting using rm -rf
+# 18-05-2024 Changes Linux 8.9 with 23ai. INSTALLEER_* SWITCHES added for conveniance
+# 19-05-2024 Clearing ociregions: -us-phoenix is not responding
 
 #-------------------------------------------------------------------------------------------------------------
 # Configuratie
 #-------------------------------------------------------------------------------------------------------------
 
-CONTAINER_NAME=${CONTAINER_NAME}         # De naam van de container
-SYS_PWD=${SYS_PWD}                       # Wachtwoord van de db users
-REGISTRY_USER=${REGISTRY_USER}           # Accountnaam voor container-registry.oracle.com. Moet in een environvariabele staan (export REGISTRY_USER="")
-REGISTRY_PWD=${REGISTRY_PWD}             # Bijbehorende wachtwoord. Moet ook in de environment staan
+CONTAINER_NAME=${CONTAINER_NAME}         # The name of the container
+SYS_PWD=${SYS_PWD}                       # Password of the db users
+REGISTRY_USER=${REGISTRY_USER}           # Accountname for container-registry.oracle.com. Must be in an environment variable (export REGISTRY_USER="")
+REGISTRY_PWD=${REGISTRY_PWD}             # Password of the registry. Must be in an environment variable (export REGISTRY_PWD="")
 
-PDB_NAAM="FREEPDB1"                      # Naam van de PDB
-ADMIN_PWD=${ADMIN_PWD}                   # Het wachtwoord van de admin-user van APEX
+PDB_NAAM="FREEPDB1"                      # Name of the PDB
+ADMIN_PWD=${ADMIN_PWD}                   # The passowrd of the admin-user within APEX
 
+INSTALLEER_APEX="TRUE"                   # Install APEX
+INSTALLEER_ORDS="TRUE"                   # Install ORDS
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
 #-------------------------------------------------------------------------------------------------------------
 
-# Controleer of docker aan staat
+# Check of Docker is running
 
 if ! docker info > /dev/null 2>&1; then
   echo "ERROR: Docker draait niet. Start Docker en probeer opnieuw."
   exit 1
 fi
 
-# Controleer op environment variabelen
+# Check on environment variables
 
 if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
   echo "ERROR: Omgevingsvariabelen zijn niet gezet. Het script stopt."
   exit 1
 fi
 
-# Controleer op environment variabelen
-
-if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
-  echo "ERROR: Omgevingsvariabelen zijn niet gezet. Het script stopt." 
-  exit 1
-fi
-
-# Inloggen in de Reporitory van Oracle
+# Login to the registry of Oracle
 
 docker login container-registry.oracle.com --username $REGISTRY_USER --password $REGISTRY_PWD
 
-#We halen de laatste database op
+# Retrieve the image of the lattest version of the Oracle database
 
 docker pull container-registry.oracle.com/database/free:latest
 
@@ -77,9 +73,13 @@ while [ $STATUS -ne 0 ]; do
   STATUS=$?
 done
  
-# Installeren van APEX
+# Installing APEX
+if [ "$INSTALLEER_APEX" = "FALSE" ]; then
+  echo "We installeren geen APEX en ORDS"
+  exit 0
+fi
 
-# Open een shell op de image
+# Open a shell on the image
 
 docker exec -i $CONTAINER_NAME bash << EOF
 
@@ -105,23 +105,22 @@ init_dir="./init"
 init_sql="$init_dir/init.sql"
 
 if [ ! -d "$init_dir" ]; then
-   # Hook directory bestaat niet, we maken hem aan
+   # Hook directory does not exist. We create it
     mkdir -p "$init_dir"
     echo "Created directory $init_dir."
 fi
 
 if [ ! -f "$init_sql" ]; then
-    # Hook bestand bestaat niet. We maken een dummy aan
+    # Hook file does not exist. We create it
     echo "select sysdate from dual;" > "$init_sql"
     echo "Created $init_sql with default content."
 fi
 
-#copieer alles uit init directory naar de container
+# Copy everything in the init directory to the container
 
 docker cp ./init/ $CONTAINER_NAME:/home/oracle/init/
 
-# Verander het wachtwoord van de ADMIN user
-# en start de hook op
+# Change the password of the admin user in APEX
 
 docker exec -i $CONTAINER_NAME bash << EOF
 
@@ -218,7 +217,14 @@ exit
 
 EOF
 
-# Installeren van ORDS. Dit is inherent herstartbaar
+
+# Installing ORDS
+
+if [ "$INSTALLEER_ORDS" = "FALSE" ]; then
+  echo "We installeren geen ORDS."
+  exit 0;
+fi 
+ 
 
 docker exec -i $CONTAINER_NAME bash << EOF
 mkdir -p /home/oracle/scripts
@@ -228,6 +234,12 @@ cd /home/oracle/
 su
 
 rm -rf /home/oracle/init
+
+cd /etc/yum/vars
+
+rm -f ociregion
+
+touch ociregion
 
 dnf update
 
@@ -271,7 +283,7 @@ rm -f ww.txt
 
 EOF
 
-# We maken een startscript 
+# Creating a startscript
 
 docker exec -i $CONTAINER_NAME bash << 'EOFMAIN'
 
@@ -286,7 +298,7 @@ nohup ${ORDS_HOME} --config /etc/ords/config serve --apex-images /home/oracle/ap
 EOF
 EOFMAIN
 
-# We maken een stopscript 
+# Creating a stopscript
 
 docker exec -i $CONTAINER_NAME bash << 'EOFMAIN' 
 cat > /home/oracle/scripts/stop_ords.sh << 'EOF'
@@ -296,7 +308,7 @@ kill $(ps -ef | grep [o]rds.war | awk '{print $2}')
 EOF
 EOFMAIN
 
-# We maken een autostart
+# Creating a autostartscript
 
 docker exec -i $CONTAINER_NAME bash << EOFMAIN
 cat >  /opt/oracle/scripts/startup/01_auto_ords.sh << EOF
@@ -306,7 +318,7 @@ sudo sh /home/oracle/scripts/start_ords.sh
 EOF
 EOFMAIN
 
-# We ruimen de boel op 
+# Cleaning up
 
 docker exec -i $CONTAINER_NAME bash << 'EOF'
 su 
@@ -319,19 +331,20 @@ EOF
 
 docker restart $CONTAINER_NAME
 
-echo "Klaar met het aanmaken van een container"
-echo "Controleer met http://localhost:8080/ords"
+echo "Ready creating the container"
+echo "Check with http://localhost:8080/ords"
 
-# Wacht even 
+# Wait a while before checking the URL
 
 sleep 20
 
 HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/ords/_/landing)
 
 if [ "$HTTP_STATUS" -eq 200 ]; then
-    echo "De URL is bereikbaar. "
-    echo "Het SYS wachtwoord voor deze container is $SYS_PWD"
-    echo "Het wachtwoord binnen APEX is $ADMIN_PWD"
+    echo "The URL can be reached. "
+    echo "The SYS password for this container is $SYS_PWD"
+    echo "The password within APEX is $ADMIN_PWD"
+    echo "The workspace is TESTWS"
 else
-    echo "De URL is niet bereikbaar. HTTP status code: $HTTP_STATUS"
+    echo "The URL can not be reached. HTTP status code: $HTTP_STATUS"
 fi

@@ -3,12 +3,13 @@
 # Auteur       : H.E. van Meerendonk
 # Creation date: 01-09-2023
 # Revisie      : 
-# 15-11-2023 Check if docker is running
-# 21-11-2023 Applying dynamic hook so that an application with objects can be created using an init.sql script.
+# 15-11-2023 HEM Check if docker is running
+# 21-11-2023 HEM Applying dynamic hook so that an application with objects can be created using an init.sql script.
 #            Replacing backticks with $()
 #            Deleting using rm -rf
-# 18-05-2024 Changes Linux 8.9 with 23ai. INSTALLEER_* SWITCHES added for conveniance
-# 19-05-2024 Clearing ociregions: -us-phoenix is not responding
+# 18-05-2024 HEM Changes Linux 8.9 with 23ai. INSTALLEER_* SWITCHES added for conveniance
+# 19-05-2024 HEM Clearing ociregions: -us-phoenix is not responding
+# 17-07-2025 HEM Token authentication and STDIN for docker login
 
 #-------------------------------------------------------------------------------------------------------------
 # Configuration
@@ -18,6 +19,7 @@ CONTAINER_NAME=${CONTAINER_NAME}         # The name of the container
 SYS_PWD=${SYS_PWD}                       # Password of the db users
 REGISTRY_USER=${REGISTRY_USER}           # Accountname for container-registry.oracle.com. Must be in an environment variable (export REGISTRY_USER="")
 REGISTRY_PWD=${REGISTRY_PWD}             # Password of the registry. Must be in an environment variable (export REGISTRY_PWD="")
+REGISTRY_TOKEN=${REGISTRY_TOKEN}         # Oauth2 token of the registry. Must be in an environment variable (export REGISTRY_TOKEN="")
 
 PDB_NAAM="FREEPDB1"                      # Name of the PDB
 ADMIN_PWD=${ADMIN_PWD}                   # The passowrd of the admin-user within APEX
@@ -38,13 +40,13 @@ fi
 # Check on environment variables
 
 if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
-  echo "ERROR: Encironment variables REGISTRY_USER, SYS_PWD and CONTAINER_NAME must be set."
+  echo "ERROR: Environment variables REGISTRY_USER, SYS_PWD and CONTAINER_NAME must be set."
   exit 1
 fi
 
 # Login to the registry of Oracle
 
-docker login container-registry.oracle.com --username $REGISTRY_USER --password $REGISTRY_PWD
+echo "$REGISTRY_TOKEN" | docker login container-registry.oracle.com --username "$REGISTRY_USER" --password-stdin
 
 # Retrieve the image of the lattest version of the Oracle database
 
@@ -75,6 +77,7 @@ done
  
 # Installing APEX
 if [ "$INSTALLEER_APEX" = "FALSE" ]; then
+  echo " "
   echo "We DO NOT install APEX and ORDS."
   exit 0
 fi

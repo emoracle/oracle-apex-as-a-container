@@ -52,7 +52,7 @@ echo "$REGISTRY_TOKEN" | docker login container-registry.oracle.com --username "
 
 docker pull container-registry.oracle.com/database/free:latest
 
-# We starten de container en check op beschikbaarheid
+# We start the container and check on availability
 
 if ! docker ps --filter "name=$CONTAINER_NAME" --filter "status=running"| grep -w $CONTAINER_NAME > /dev/null; then
   echo "Container $CONTAINER_NAME is not running. Starting it now..."

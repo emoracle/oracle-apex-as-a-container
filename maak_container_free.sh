@@ -267,11 +267,7 @@ dnf install ords -y
 
 export _JAVA_OPTIONS="-Xms512M -Xmx512M"
 
-echo $SYS_PWD > /home/oracle/ww.txt
-echo $SYS_PWD >> /home/oracle/ww.txt
-echo $SYS_PWD >> /home/oracle/ww.txt
-echo $SYS_PWD >> /home/oracle/ww.txt
-
+printf '%s\n%.0s' "$SYS_PWD" {1..4} | \
 ords --config /etc/ords/config install \
 --admin-user SYS \
 --db-hostname localhost \
@@ -280,9 +276,7 @@ ords --config /etc/ords/config install \
 --feature-db-api true \
 --feature-rest-enabled-sql true \
 --feature-sdw true \
---password-stdin < /home/oracle/ww.txt
-
-rm -f ww.txt
+--password-stdin 
 
 EOF
 
@@ -338,17 +332,35 @@ echo "Ready creating the container"
 echo "Check with http://localhost:8080/ords"
 
 # Wait a while before checking the URL
+URL="http://localhost:8080/ords/_/landing"
+MAX_ATTEMPTS=30        # total attempts (≈ 5 min @ 10 s)
+SLEEP_SECONDS=10       # wait between retries
 
-sleep 20
+echo "Checking ORDS endpoint at $URL ..."
+for ((i=1; i<=MAX_ATTEMPTS; i++)); do
+  HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$URL" || echo "000")
 
-HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8080/ords/_/landing)
-
-if [ "$HTTP_STATUS" -eq 200 ]; then
-    echo "The URL can be reached. "
+  if [ "$HTTP_STATUS" -eq 200 ]; then
+    echo -e "\n ORDS is up (HTTP 200)."
     echo "The SYS password for this container is $SYS_PWD"
     echo "The password within APEX is $ADMIN_PWD"
-else
-    echo "The URL can not be reached. HTTP status code: $HTTP_STATUS"
+    echo "Database name: $PDB_NAME"
+    break
+  fi
+
+  printf "\rAttempt %02d/%02d — status %s ... " "$i" "$MAX_ATTEMPTS" "$HTTP_STATUS"
+  sleep "$SLEEP_SECONDS"
+done
+
+if [ "$HTTP_STATUS" -ne 200 ]; then
+  echo -e "\n ORDS did not respond with HTTP 200 after $((MAX_ATTEMPTS*SLEEP_SECONDS)) seconds."
+  exit 1
 fi
 
-echo "Database name : " "$PDB_NAME"
+echo "End of the installation. The container is ready to use."  
+echo "You can now connect to the database using the following command:"
+echo "sqlplus sys/$SYS_PWD@//localhost:1521/$PDB_NAME as sysdba"
+echo "You can also connect to APEX using the following URL:"
+echo "http://localhost:8080/ords/apex"
+echo "You can also connect to ORDS using the following URL:"
+echo "http://localhost:8080/ords/_/landing" 

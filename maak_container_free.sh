@@ -7,9 +7,10 @@
 # 21-11-2023 HEM Applying dynamic hook so that an application with objects can be created using an init.sql script.
 #            Replacing backticks with $()
 #            Deleting using rm -rf
-# 18-05-2024 HEM Changes Linux 8.9 with 23ai. INSTALLEER_* SWITCHES added for conveniance
+# 18-05-2024 HEM Changes Linux 8.9 with 23ai. INSTALL_* SWITCHES added for conveniance
 # 19-05-2024 HEM Clearing ociregions: -us-phoenix is not responding
 # 17-07-2025 HEM Token authentication and STDIN for docker login
+# 23-07-2025 HEM  not in Dutch
 
 #-------------------------------------------------------------------------------------------------------------
 # Configuration
@@ -21,11 +22,11 @@ REGISTRY_USER=${REGISTRY_USER}           # Accountname for container-registry.or
 REGISTRY_PWD=${REGISTRY_PWD}             # Password of the registry. Must be in an environment variable (export REGISTRY_PWD="")
 REGISTRY_TOKEN=${REGISTRY_TOKEN}         # Oauth2 token of the registry. Must be in an environment variable (export REGISTRY_TOKEN="")
 
-PDB_NAAM="FREEPDB1"                      # Name of the PDB
+PDB_NAME="FREEPDB1"                      # Name of the PDB
 ADMIN_PWD=${ADMIN_PWD}                   # The passowrd of the admin-user within APEX
 
-INSTALLEER_APEX=${INSTALL_APEX}          # Install APEX
-INSTALLEER_ORDS=${INSTALL_ORDS}          # Install ORDS
+INSTALL_APEX_IN_IMAGE=${INSTALL_APEX}    # Install APEX
+INSTALL_ORDS_IN_IMAGE=${INSTALL_ORDS}    # Install ORDS
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
 #-------------------------------------------------------------------------------------------------------------
@@ -48,7 +49,7 @@ fi
 
 echo "$REGISTRY_TOKEN" | docker login container-registry.oracle.com --username "$REGISTRY_USER" --password-stdin
 
-# Retrieve the image of the lattest version of the Oracle database
+# Retrieve the image of the latest version of the Oracle database
 
 docker pull container-registry.oracle.com/database/free:latest
 
@@ -68,7 +69,7 @@ STATUS=$?
 while [ $STATUS -ne 0 ]; do
   COUNTER=$((COUNTER + 1))
 
-  printf "\r$STATUS $CONTAINER_NAME Controleren op beschikbaarheid database... cycle: %d" $COUNTER
+  printf "\r$STATUS $CONTAINER_NAME Check for availability database... cycle: %d" $COUNTER
   sleep  10
 
   docker exec $CONTAINER_NAME /opt/oracle/checkDBStatus.sh > /dev/null 2>&1
@@ -76,9 +77,10 @@ while [ $STATUS -ne 0 ]; do
 done
  
 # Installing APEX
-if [ "$INSTALLEER_APEX" = "FALSE" ]; then
+if [ "$INSTALL_APEX_IN_IMAGE" = "FALSE" ]; then
   echo " "
   echo "We DO NOT install APEX and ORDS."
+  echo "Database name : " "$PDB_NAME"
   exit 0
 fi
 
@@ -87,7 +89,7 @@ fi
 docker exec -i $CONTAINER_NAME bash << EOF
 
 if [ -d "/home/oracle/apex" ]; then
-  echo "apex directory bestaat al. We slaan de installatie van apex over"
+  echo "apex directory already exists. Installation of APEX will be skipped."
 else
   curl -o apex-latest.zip https://download.oracle.com/otn_software/apex/apex-latest.zip
 
@@ -95,7 +97,7 @@ else
 
   cd apex
 
-  echo "ALTER SESSION SET CONTAINER = $PDB_NAAM;
+  echo "ALTER SESSION SET CONTAINER = $PDB_NAME;
   @apexins.sql SYSAUX SYSAUX TEMP /i/
   ALTER USER APEX_PUBLIC_USER ACCOUNT UNLOCK;
   ALTER USER APEX_PUBLIC_USER IDENTIFIED BY $SYS_PWD;
@@ -129,7 +131,7 @@ docker exec -i $CONTAINER_NAME bash << EOF
 
 cd apex
 
-echo "ALTER SESSION SET CONTAINER = $PDB_NAAM;
+echo "ALTER SESSION SET CONTAINER = $PDB_NAME;
 @@core/scripts/set_appun.sql
 
 alter session set current_schema = &APPUN;
@@ -217,13 +219,11 @@ Prompt Start het root-script init.sql
 exit
 " | sqlplus / as sysdba
 
-
 EOF
-
 
 # Installing ORDS
 
-if [ "$INSTALLEER_ORDS" = "FALSE" ]; then
+if [ "$INSTALL_ORDS_IN_IMAGE" = "FALSE" ]; then
   echo "ORDS is not being installed."
   exit 0;
 fi 
@@ -350,3 +350,5 @@ if [ "$HTTP_STATUS" -eq 200 ]; then
 else
     echo "The URL can not be reached. HTTP status code: $HTTP_STATUS"
 fi
+
+echo "Database name : " "$PDB_NAME"

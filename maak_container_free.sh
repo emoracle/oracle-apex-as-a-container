@@ -1,4 +1,6 @@
-# PRE          : Environment variables REGISTRY_USER and REGISTRY_PWD and SYS_PWD must exist
+#!/usr/bin/env bash
+
+# PRE          : Environment variables REGISTRY_USER, REGISTRY_TOKEN and SYS_PWD must exist
 #                to connect to container-registry.oracle.com and as the password within the image
 # Auteur       : H.E. van Meerendonk
 # Creation date: 01-09-2023
@@ -12,42 +14,99 @@
 # 17-07-2025 HEM Token authentication and STDIN for docker login
 # 23-07-2025 HEM  not in Dutch
 
+set -Eeuo pipefail
+
+trap 'printf "ERROR: Installation failed at line %s.\n" "$LINENO" >&2' ERR
+
 #-------------------------------------------------------------------------------------------------------------
 # Configuration
 #-------------------------------------------------------------------------------------------------------------
 
-CONTAINER_NAME=${CONTAINER_NAME}         # The name of the container
-SYS_PWD=${SYS_PWD}                       # Password of the db users
-REGISTRY_USER=${REGISTRY_USER}           # Accountname for container-registry.oracle.com. Must be in an environment variable (export REGISTRY_USER="")
-REGISTRY_PWD=${REGISTRY_PWD}             # Password of the registry. Must be in an environment variable (export REGISTRY_PWD="")
-REGISTRY_TOKEN=${REGISTRY_TOKEN}         # Oauth2 token of the registry. Must be in an environment variable (export REGISTRY_TOKEN="")
+CONTAINER_NAME=${CONTAINER_NAME:-}       # The name of the container
+SYS_PWD=${SYS_PWD:-}                     # Password of the db users
+REGISTRY_USER=${REGISTRY_USER:-}         # Account name for container-registry.oracle.com
+REGISTRY_TOKEN=${REGISTRY_TOKEN:-}       # OAuth2 token for container-registry.oracle.com
 
 PDB_NAME="FREEPDB1"                      # Name of the PDB
-ADMIN_PWD=${ADMIN_PWD}                   # The passowrd of the admin-user within APEX
+ADMIN_PWD=${ADMIN_PWD:-}                 # The password of the admin user within APEX
 
-INSTALL_APEX_IN_IMAGE=${INSTALL_APEX}    # Install APEX
-INSTALL_ORDS_IN_IMAGE=${INSTALL_ORDS}    # Install ORDS
+INSTALL_APEX_IN_IMAGE=${INSTALL_APEX:-}  # Install APEX
+INSTALL_ORDS_IN_IMAGE=${INSTALL_ORDS:-}  # Install ORDS
+DB_MAX_ATTEMPTS=${DB_MAX_ATTEMPTS:-60}
+DB_RETRY_SECONDS=${DB_RETRY_SECONDS:-10}
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+
+die() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
+
+require_value() {
+  local name=$1
+  local value=$2
+  [[ -n "$value" ]] || die "Environment variable $name must be set."
+}
+
+validate_boolean() {
+  local name=$1
+  local value=$2
+  [[ "$value" == "TRUE" || "$value" == "FALSE" ]] || \
+    die "$name must be either TRUE or FALSE."
+}
+
+validate_positive_integer() {
+  local name=$1
+  local value=$2
+  [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$name must be a positive integer."
+}
+
+validate_password() {
+  local name=$1
+  local value=$2
+  [[ "$value" =~ ^[A-Za-z0-9_@%+.,:#\!\?-]+$ ]] || \
+    die "$name contains unsupported characters. Use letters, digits, or _@%+.,:#!?- only."
+}
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
 #-------------------------------------------------------------------------------------------------------------
 
-# Check of Docker is running
+# Validate configuration before invoking Docker
 
-if ! docker info > /dev/null 2>&1; then
-  echo "ERROR: Docker is not running. Start Docker and try again."
-  exit 1
+require_value REGISTRY_USER "$REGISTRY_USER"
+require_value REGISTRY_TOKEN "$REGISTRY_TOKEN"
+require_value SYS_PWD "$SYS_PWD"
+require_value CONTAINER_NAME "$CONTAINER_NAME"
+require_value INSTALL_APEX "$INSTALL_APEX_IN_IMAGE"
+require_value INSTALL_ORDS "$INSTALL_ORDS_IN_IMAGE"
+
+validate_boolean INSTALL_APEX "$INSTALL_APEX_IN_IMAGE"
+validate_boolean INSTALL_ORDS "$INSTALL_ORDS_IN_IMAGE"
+validate_positive_integer DB_MAX_ATTEMPTS "$DB_MAX_ATTEMPTS"
+validate_positive_integer DB_RETRY_SECONDS "$DB_RETRY_SECONDS"
+validate_password SYS_PWD "$SYS_PWD"
+
+[[ "$CONTAINER_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]] || \
+  die "CONTAINER_NAME must start with an alphanumeric character and may only contain letters, digits, underscores, periods and dashes."
+
+if [[ "$INSTALL_ORDS_IN_IMAGE" == "TRUE" && "$INSTALL_APEX_IN_IMAGE" != "TRUE" ]]; then
+  die "INSTALL_ORDS=TRUE requires INSTALL_APEX=TRUE."
 fi
 
-# Check on environment variables
-
-if [ -z "$REGISTRY_USER" ] || [ -z "$SYS_PWD" ] || [ -z "$CONTAINER_NAME" ]; then
-  echo "ERROR: Environment variables REGISTRY_USER, SYS_PWD and CONTAINER_NAME must be set."
-  exit 1
+if [[ "$INSTALL_APEX_IN_IMAGE" == "TRUE" ]]; then
+  require_value ADMIN_PWD "$ADMIN_PWD"
+  validate_password ADMIN_PWD "$ADMIN_PWD"
 fi
+
+command -v docker >/dev/null 2>&1 || die "Docker is not installed or is not on PATH."
+command -v curl >/dev/null 2>&1 || die "curl is not installed or is not on PATH."
+
+# Check if Docker is running
+
+docker info >/dev/null 2>&1 || die "Docker is not running. Start Docker and try again."
 
 # Login to the registry of Oracle
 
-echo "$REGISTRY_TOKEN" | docker login container-registry.oracle.com --username "$REGISTRY_USER" --password-stdin
+printf '%s\n' "$REGISTRY_TOKEN" | docker login container-registry.oracle.com --username "$REGISTRY_USER" --password-stdin
 
 # Retrieve the image of the latest version of the Oracle database
 
@@ -55,26 +114,26 @@ docker pull container-registry.oracle.com/database/free:latest
 
 # We start the container and check on availability
 
-if ! docker ps --filter "name=$CONTAINER_NAME" --filter "status=running"| grep -w $CONTAINER_NAME > /dev/null; then
-  echo "Container $CONTAINER_NAME is not running. Starting it now..."
-  docker run -d -it --name $CONTAINER_NAME -p 1521:1521 -p 5500:5500 -p 8080:8080 -p 8443:8443 -e ORACLE_PWD=$SYS_PWD container-registry.oracle.com/database/free:latest
-else
+if docker ps --filter "name=^/${CONTAINER_NAME}$" --filter "status=running" --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
   echo "Container $CONTAINER_NAME is already running."
+elif docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+  echo "Container $CONTAINER_NAME exists but is stopped. Starting it now..."
+  docker start "$CONTAINER_NAME" >/dev/null
+else
+  echo "Container $CONTAINER_NAME is not running. Starting it now..."
+  docker run -d -it --name "$CONTAINER_NAME" -p 1521:1521 -p 5500:5500 -p 8080:8080 -p 8443:8443 -e "ORACLE_PWD=$SYS_PWD" container-registry.oracle.com/database/free:latest >/dev/null
 fi
 
 COUNTER=0
-docker exec $CONTAINER_NAME /opt/oracle/checkDBStatus.sh > /dev/null 2>&1
-STATUS=$?
-
-while [ $STATUS -ne 0 ]; do
+while ! docker exec "$CONTAINER_NAME" /opt/oracle/checkDBStatus.sh >/dev/null 2>&1; do
   COUNTER=$((COUNTER + 1))
-
-  printf "\r$STATUS $CONTAINER_NAME Check for availability database... cycle: %d" $COUNTER
-  sleep  10
-
-  docker exec $CONTAINER_NAME /opt/oracle/checkDBStatus.sh > /dev/null 2>&1
-  STATUS=$?
+  if (( COUNTER >= DB_MAX_ATTEMPTS )); then
+    die "Database did not become available after $((DB_MAX_ATTEMPTS * DB_RETRY_SECONDS)) seconds."
+  fi
+  printf '\r%s Check for database availability... cycle: %d/%d' "$CONTAINER_NAME" "$COUNTER" "$DB_MAX_ATTEMPTS"
+  sleep "$DB_RETRY_SECONDS"
 done
+printf '\nDatabase is available.\n'
  
 # Installing APEX
 if [ "$INSTALL_APEX_IN_IMAGE" = "FALSE" ]; then
@@ -86,27 +145,29 @@ fi
 
 # Open a shell on the image
 
-docker exec -i $CONTAINER_NAME bash << EOF
+docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << EOF
 
 if [ -d "/home/oracle/apex" ]; then
   echo "apex directory already exists. Installation of APEX will be skipped."
 else
-  curl -o apex-latest.zip https://download.oracle.com/otn_software/apex/apex-latest.zip
+  curl --fail --location --show-error -o apex-latest.zip https://download.oracle.com/otn_software/apex/apex-latest.zip
 
   unzip apex-latest.zip
 
   cd apex
 
-  echo "ALTER SESSION SET CONTAINER = $PDB_NAME;
+  echo "whenever oserror exit failure
+  whenever sqlerror exit sql.sqlcode
+  ALTER SESSION SET CONTAINER = $PDB_NAME;
   @apexins.sql SYSAUX SYSAUX TEMP /i/
   ALTER USER APEX_PUBLIC_USER ACCOUNT UNLOCK;
-  ALTER USER APEX_PUBLIC_USER IDENTIFIED BY $SYS_PWD;
+  ALTER USER APEX_PUBLIC_USER IDENTIFIED BY \"$SYS_PWD\";
   exit" | sqlplus / as sysdba
 fi 
 
 EOF
 
-init_dir="./init"
+init_dir="${INIT_DIR:-$SCRIPT_DIR/build/init}"
 init_sql="$init_dir/init.sql"
 
 if [ ! -d "$init_dir" ]; then
@@ -123,15 +184,17 @@ fi
 
 # Copy everything in the init directory to the container
 
-docker cp ./init/ $CONTAINER_NAME:/home/oracle/init/
+docker cp "$init_dir/." "$CONTAINER_NAME:/home/oracle/init/"
 
 # Change the password of the admin user in APEX
 
-docker exec -i $CONTAINER_NAME bash << EOF
+docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << EOF
 
 cd apex
 
-echo "ALTER SESSION SET CONTAINER = $PDB_NAME;
+echo "whenever oserror exit failure
+whenever sqlerror exit sql.sqlcode
+ALTER SESSION SET CONTAINER = $PDB_NAME;
 @@core/scripts/set_appun.sql
 
 alter session set current_schema = &APPUN;
@@ -229,12 +292,10 @@ if [ "$INSTALL_ORDS_IN_IMAGE" = "FALSE" ]; then
 fi 
  
 
-docker exec -i $CONTAINER_NAME bash << EOF
+docker exec --user root -i "$CONTAINER_NAME" bash -seuo pipefail << EOF
 mkdir -p /home/oracle/scripts
 
 cd /home/oracle/
-
-su
 
 rm -rf /home/oracle/init
 
@@ -244,7 +305,7 @@ rm -f ociregion
 
 touch ociregion
 
-dnf update
+dnf update -y
 
 dnf install sudo -y
 
@@ -259,6 +320,7 @@ dnf install java-17-openjdk -y
 mkdir -p /etc/ords
 mkdir -p /etc/ords/config
 mkdir -p /home/oracle/logs
+chown -R oracle:oinstall /home/oracle/scripts /home/oracle/logs
 chmod -R 777 /etc/ords
 java -version
 
@@ -282,7 +344,7 @@ EOF
 
 # Creating a startscript
 
-docker exec -i $CONTAINER_NAME bash << 'EOFMAIN'
+docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << 'EOFMAIN'
 
 cat > /home/oracle/scripts/start_ords.sh << 'EOF'
 export ORDS_HOME=/usr/local/bin/ords
@@ -297,7 +359,7 @@ EOFMAIN
 
 # Creating a stopscript
 
-docker exec -i $CONTAINER_NAME bash << 'EOFMAIN' 
+docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << 'EOFMAIN'
 cat > /home/oracle/scripts/stop_ords.sh << 'EOF'
 
 kill $(ps -ef | grep [o]rds.war | awk '{print $2}')
@@ -307,7 +369,7 @@ EOFMAIN
 
 # Creating a autostartscript
 
-docker exec -i $CONTAINER_NAME bash << EOFMAIN
+docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << EOFMAIN
 cat >  /opt/oracle/scripts/startup/01_auto_ords.sh << EOF
 
 sudo sh /home/oracle/scripts/start_ords.sh
@@ -317,16 +379,14 @@ EOFMAIN
 
 # Cleaning up
 
-docker exec -i $CONTAINER_NAME bash << 'EOF'
-su 
-
-rm apex-latest.zip
+docker exec --user root -i "$CONTAINER_NAME" bash -seuo pipefail << 'EOF'
+rm -f apex-latest.zip
 
 $ORACLE_HOME/bin/oraversion -compositeVersion > /opt/oracle/oradata/version.txt
 
 EOF
 
-docker restart $CONTAINER_NAME
+docker restart "$CONTAINER_NAME" >/dev/null
 
 echo "Ready creating the container"
 echo "Check with http://localhost:8080/ords"
@@ -338,9 +398,10 @@ SLEEP_SECONDS=10       # wait between retries
 
 echo "Checking ORDS endpoint at $URL ..."
 for ((i=1; i<=MAX_ATTEMPTS; i++)); do
-  HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" "$URL" || echo "000")
+  HTTP_STATUS=$(curl --output /dev/null --silent --write-out "%{http_code}" "$URL" || true)
+  HTTP_STATUS=${HTTP_STATUS:-000}
 
-  if [ "$HTTP_STATUS" -eq 200 ]; then
+  if [[ "$HTTP_STATUS" == "200" ]]; then
     echo -e "\n ORDS is up (HTTP 200)."
     echo "The SYS password for this container is $SYS_PWD"
     echo "The password within APEX is $ADMIN_PWD"
@@ -352,7 +413,7 @@ for ((i=1; i<=MAX_ATTEMPTS; i++)); do
   sleep "$SLEEP_SECONDS"
 done
 
-if [ "$HTTP_STATUS" -ne 200 ]; then
+if [[ "$HTTP_STATUS" != "200" ]]; then
   echo -e "\n ORDS did not respond with HTTP 200 after $((MAX_ATTEMPTS*SLEEP_SECONDS)) seconds."
   exit 1
 fi
@@ -363,4 +424,4 @@ echo "sqlplus sys/$SYS_PWD@//localhost:1521/$PDB_NAME as sysdba"
 echo "You can also connect to APEX using the following URL:"
 echo "http://localhost:8080/ords/apex"
 echo "You can also connect to ORDS using the following URL:"
-echo "http://localhost:8080/ords/_/landing" 
+echo "http://localhost:8080/ords/_/landing"

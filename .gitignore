@@ -18,5 +18,4 @@
 /build
 /dist
 
-# Ignore start_container.sh
 startContainer.sh

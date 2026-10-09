@@ -307,21 +307,12 @@ touch ociregion
 
 dnf update -y
 
-dnf install sudo -y
-
-if sudo grep -q "^oracle[[:space:]]" /etc/sudoers || sudo grep -q "^oracle[[:space:]]" /etc/sudoers.d/*; then
-    echo "User oracle already has sudo privileges."
-else
-    echo "oracle ALL=(ALL) NOPASSWD: ALL" | sudo tee -a /etc/sudoers
-fi
-
 dnf install java-17-openjdk -y
 
 mkdir -p /etc/ords
 mkdir -p /etc/ords/config
 mkdir -p /home/oracle/logs
 chown -R oracle:oinstall /home/oracle/scripts /home/oracle/logs
-chmod -R 777 /etc/ords
 java -version
 
 yum-config-manager --add-repo=http://yum.oracle.com/repo/OracleLinux/OL8/oracle/software/x86_64
@@ -340,6 +331,10 @@ ords --config /etc/ords/config install \
 --feature-sdw true \
 --password-stdin 
 
+chown -R oracle:oinstall /etc/ords
+find /etc/ords -type d -exec chmod 750 {} +
+find /etc/ords -type f -exec chmod 640 {} +
+
 EOF
 
 # Creating a startscript
@@ -347,7 +342,7 @@ EOF
 docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << 'EOFMAIN'
 
 cat > /home/oracle/scripts/start_ords.sh << 'EOF'
-export ORDS_HOME=/usr/local/bin/ords
+export ORDS_HOME=/usr/bin/ords
 export _JAVA_OPTIONS="-Xms512M -Xmx512M"
 
 LOGFILE=/home/oracle/logs/ords-$(date +"%Y%m%d").log
@@ -369,10 +364,14 @@ EOFMAIN
 
 # Creating a autostartscript
 
-docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << EOFMAIN
-cat >  /opt/oracle/scripts/startup/01_auto_ords.sh << EOF
+docker exec -i "$CONTAINER_NAME" bash -seuo pipefail << 'EOFMAIN'
+cat > /opt/oracle/scripts/startup/01_auto_ords.sh << 'EOF'
 
-sudo sh /home/oracle/scripts/start_ords.sh
+if [ "$(id -u)" -eq 0 ]; then
+  runuser -u oracle -- sh /home/oracle/scripts/start_ords.sh
+else
+  sh /home/oracle/scripts/start_ords.sh
+fi
 
 EOF
 EOFMAIN

@@ -392,12 +392,15 @@ echo "Check with http://localhost:8080/ords"
 
 # Wait a while before checking the URL
 URL="http://localhost:8080/ords/_/landing"
-MAX_ATTEMPTS=30        # total attempts (≈ 5 min @ 10 s)
+MAX_ATTEMPTS=30        # At most 10 seconds per request plus 10 seconds between retries
 SLEEP_SECONDS=10       # wait between retries
 
 echo "Checking ORDS endpoint at $URL ..."
 for ((i=1; i<=MAX_ATTEMPTS; i++)); do
-  HTTP_STATUS=$(curl --output /dev/null --silent --write-out "%{http_code}" "$URL" || true)
+  if ! HTTP_STATUS=$(curl --connect-timeout 5 --max-time 10 \
+      --output /dev/null --silent --write-out "%{http_code}" "$URL"); then
+    HTTP_STATUS=000
+  fi
   HTTP_STATUS=${HTTP_STATUS:-000}
 
   if [[ "$HTTP_STATUS" == "200" ]]; then
@@ -409,11 +412,13 @@ for ((i=1; i<=MAX_ATTEMPTS; i++)); do
   fi
 
   printf "\rAttempt %02d/%02d — status %s ... " "$i" "$MAX_ATTEMPTS" "$HTTP_STATUS"
-  sleep "$SLEEP_SECONDS"
+  if (( i < MAX_ATTEMPTS )); then
+    sleep "$SLEEP_SECONDS"
+  fi
 done
 
 if [[ "$HTTP_STATUS" != "200" ]]; then
-  echo -e "\n ORDS did not respond with HTTP 200 after $((MAX_ATTEMPTS*SLEEP_SECONDS)) seconds."
+  echo -e "\n ORDS did not respond with HTTP 200 after $MAX_ATTEMPTS attempts (request timeout: 10 seconds)."
   exit 1
 fi
 

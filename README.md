@@ -7,7 +7,7 @@ This script automates the deployment and configuration of an Oracle Database con
 - **Docker**: The script requires Docker to be installed and running on your machine.
 - **Environment Variables**: Before running the script, ensure the following environment variables are set:
   - `REGISTRY_USER`: Your Oracle Container Registry username.
-  - `REGISTRY_PWD`: Your Oracle Container Registry password.
+  - `REGISTRY_TOKEN`: Your Oracle Container Registry authentication token.
   - `SYS_PWD`: The SYS user password for the Oracle database.
   - `CONTAINER_NAME`: The name you wish to assign to your Oracle database container.
   - `ADMIN_PWD`: The admin user password for Oracle APEX.
@@ -26,13 +26,20 @@ This script automates the deployment and configuration of an Oracle Database con
 
 ## Usage
 
-1. **Set Environment Variables**: Export the necessary environment variables (`REGISTRY_USER`, `REGISTRY_PWD`, `SYS_PWD`, `CONTAINER_NAME`, `ADMIN_PWD`) in your terminal session.
+1. **Configure the Local Wrapper**: The local `build/startContainer.sh` contains fixed exports for credentials, the container name and the APEX/ORDS installation flags. Check these settings before running it. The wrapper does not prompt for credentials and its exports override existing environment values. `REGISTRY_TOKEN` is used for registry authentication; the legacy `REGISTRY_PWD` export is not used for login. Credentials are stored in plaintext in this local file: restrict access and do not share or commit it. `/build` is excluded from Git. As an alternative, run `maak_container_free.sh` directly with the required environment variables supplied securely.
 
-2. **Run the Script**: Execute the script in your terminal. Ensure you have sufficient permissions to invoke Docker commands.
+2. **Run the Script**: From the project root, run the following commands. The wrapper uses relative paths, so it must run from `build`. Ensure Docker is running and you have permission to invoke Docker commands.
 
-3. **Access APEX**: Once the script completes, Oracle APEX can be accessed at `http://localhost:8080/ords`. Log in using the APEX admin credentials you specified.
+   ```bash
+   cd build
+   bash startContainer.sh
+   ```
 
-4. **Database Connection**: Connect to your Oracle database using the standard connection details provided by the script output, including the `SYS_PWD` password for SYS user access.
+3. **Access APEX**: When APEX and ORDS are enabled and installation completes, Oracle APEX can be accessed at `http://localhost:8080/ords/apex`. Log in using the APEX admin credentials you specified.
+
+4. **Database Connection and Logs**: Use the connection command shown by the installer and enter `SYS_PWD` when SQL*Plus prompts. Passwords are not printed. The installer redacts literal occurrences of configured secret values in its output, including upstream error messages. The wrapper removes the previous `build/install.log` and records new output there using `tee`. It does not enforce mode `600`; permissions depend on your current umask. To restrict access to newly created logs, run `umask 077` before starting the wrapper.
+
+Credentials previously stored in scripts or installation logs should be rotated through their respective registry/database administrators. Updating these scripts does not rotate existing credentials or sanitize historical copies and logs. Demo-account passwords and network settings are separate configuration concerns.
 
 ## Troubleshooting
 

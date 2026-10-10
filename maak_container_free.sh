@@ -66,6 +66,36 @@ validate_password() {
   [[ "$value" =~ ^[A-Za-z0-9_@%+.,:#\!\?-]+$ ]] || \
     die "$name contains unsupported characters. Use letters, digits, or _@%+.,:#!?- only."
 }
+
+# Treat upstream diagnostics as sensitive too (SQLPlus can echo failing SQL).
+# Quote the replacement pattern so token punctuation is matched literally.
+redact_output() {
+  local line secret part i j swap
+  local -a secrets=()
+  for secret in "$REGISTRY_TOKEN" "$SYS_PWD" "$ADMIN_PWD" "${REGISTRY_PWD:-}"; do
+    while IFS= read -r part || [[ -n "$part" ]]; do
+      [[ -z "$part" ]] || secrets+=("$part")
+    done <<< "$secret"
+  done
+  # Mask the longest value first when credentials share a prefix/sub-string.
+  for ((i=0; i<${#secrets[@]}; i++)); do
+    for ((j=i+1; j<${#secrets[@]}; j++)); do
+      if (( ${#secrets[j]} > ${#secrets[i]} )); then
+        swap=${secrets[i]}
+        secrets[i]=${secrets[j]}
+        secrets[j]=$swap
+      fi
+    done
+  done
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    for secret in "${secrets[@]}"; do
+      line=${line//"$secret"/[REDACTED]}
+    done
+    printf '%s\n' "$line"
+  done
+}
+
+run_installation() (
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
 #-------------------------------------------------------------------------------------------------------------
@@ -130,7 +160,7 @@ while ! docker exec "$CONTAINER_NAME" /opt/oracle/checkDBStatus.sh >/dev/null 2>
   if (( COUNTER >= DB_MAX_ATTEMPTS )); then
     die "Database did not become available after $((DB_MAX_ATTEMPTS * DB_RETRY_SECONDS)) seconds."
   fi
-  printf '\r%s Check for database availability... cycle: %d/%d' "$CONTAINER_NAME" "$COUNTER" "$DB_MAX_ATTEMPTS"
+  printf '%s Check for database availability... cycle: %d/%d\n' "$CONTAINER_NAME" "$COUNTER" "$DB_MAX_ATTEMPTS"
   sleep "$DB_RETRY_SECONDS"
 done
 printf '\nDatabase is available.\n'
@@ -405,13 +435,11 @@ for ((i=1; i<=MAX_ATTEMPTS; i++)); do
 
   if [[ "$HTTP_STATUS" == "200" ]]; then
     echo -e "\n ORDS is up (HTTP 200)."
-    echo "The SYS password for this container is $SYS_PWD"
-    echo "The password within APEX is $ADMIN_PWD"
     echo "Database name: $PDB_NAME"
     break
   fi
 
-  printf "\rAttempt %02d/%02d — status %s ... " "$i" "$MAX_ATTEMPTS" "$HTTP_STATUS"
+  printf 'Attempt %02d/%02d — status %s ...\n' "$i" "$MAX_ATTEMPTS" "$HTTP_STATUS"
   if (( i < MAX_ATTEMPTS )); then
     sleep "$SLEEP_SECONDS"
   fi
@@ -424,8 +452,13 @@ fi
 
 echo "End of the installation. The container is ready to use."  
 echo "You can now connect to the database using the following command:"
-echo "sqlplus sys/$SYS_PWD@//localhost:1521/$PDB_NAME as sysdba"
+echo "sqlplus sys@//localhost:1521/$PDB_NAME as sysdba"
+echo "Enter the database password when SQL*Plus prompts for it."
 echo "You can also connect to APEX using the following URL:"
 echo "http://localhost:8080/ords/apex"
 echo "You can also connect to ORDS using the following URL:"
 echo "http://localhost:8080/ords/_/landing"
+)
+
+# A subshell keeps early exits local; pipefail preserves installation failures.
+run_installation "$@" 2>&1 | redact_output

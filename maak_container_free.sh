@@ -151,7 +151,7 @@ elif docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format '{{.Names}}' | g
   docker start "$CONTAINER_NAME" >/dev/null
 else
   echo "Container $CONTAINER_NAME is not running. Starting it now..."
-  docker run -d -it --name "$CONTAINER_NAME" -p 1521:1521 -p 5500:5500 -p 8080:8080 -p 8443:8443 -e "ORACLE_PWD=$SYS_PWD" container-registry.oracle.com/database/free:latest >/dev/null
+  docker run -d -it --name "$CONTAINER_NAME" -p 1521:1521 -p 8080:8080 -p 8443:8443 -e "ORACLE_PWD=$SYS_PWD" container-registry.oracle.com/database/free:latest >/dev/null
 fi
 
 COUNTER=0

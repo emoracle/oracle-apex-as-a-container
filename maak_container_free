@@ -4,17 +4,11 @@
 #                to connect to container-registry.oracle.com and as the password within the image
 # Auteur       : H.E. van Meerendonk
 # Creation date: 01-09-2023
-# Revisie      : 
-# 15-11-2023 HEM Check if docker is running
-# 21-11-2023 HEM Applying dynamic hook so that an application with objects can be created using an init.sql script.
-#            Replacing backticks with $()
-#            Deleting using rm -rf
-# 18-05-2024 HEM Changes Linux 8.9 with 23ai. INSTALL_* SWITCHES added for conveniance
-# 19-05-2024 HEM Clearing ociregions: -us-phoenix is not responding
-# 17-07-2025 HEM Token authentication and STDIN for docker login
-# 23-07-2025 HEM  not in Dutch
+# 
 
 set -Eeuo pipefail
+
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/load_env.sh"
 
 trap 'printf "ERROR: Installation failed at line %s.\n" "$LINENO" >&2' ERR
 

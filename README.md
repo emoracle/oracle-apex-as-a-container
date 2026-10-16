@@ -5,12 +5,13 @@ This script automates the deployment and configuration of an Oracle Database con
 ## Prerequisites
 
 - **Docker**: The script requires Docker to be installed and running on your machine.
-- **Environment Variables**: Before running the script, ensure the following environment variables are set:
+- **Environment Variables**: Configure the following variables in the root `.env` file or the calling environment:
+  - `REGISTRY`: Destination registry and namespace for image publishing and cleanup, loaded from `.env` by each script.
   - `REGISTRY_USER`: Your Oracle Container Registry username.
   - `REGISTRY_TOKEN`: Your Oracle Container Registry authentication token.
   - `SYS_PWD`: The SYS user password for the Oracle database.
   - `CONTAINER_NAME`: The name you wish to assign to your Oracle database container.
-  - `ADMIN_PWD`: The admin user password for Oracle APEX.
+  - `ADMIN_PWD`: The admin user password for Oracle APEX (required when `INSTALL_APEX=TRUE`).
   - `INSTALL_APEX`: APEX must be installed (TRUE) or not (FALSE)
   - `INSTALL_ORDS`: ORDS must be installed (TRUE) or not (FALSE). APEX installation is a prerequisite.
 
@@ -26,20 +27,25 @@ This script automates the deployment and configuration of an Oracle Database con
 
 ## Usage
 
-1. **Configure the Local Wrapper**: The local `build/startContainer.sh` contains fixed exports for credentials, the container name and the APEX/ORDS installation flags. Check these settings before running it. The wrapper does not prompt for credentials and its exports override existing environment values. `REGISTRY_TOKEN` is used for registry authentication; the legacy `REGISTRY_PWD` export is not used for login. Credentials are stored in plaintext in this local file: restrict access and do not share or commit it. `/build` is excluded from Git. As an alternative, run `maak_container_free.sh` directly with the required environment variables supplied securely.
+1. **Configure `.env`**: Shared settings and credentials live in `.env` at the project root, beside `maak_container_free`. This file is excluded from Git. Use Bash assignments such as `REGISTRY="fra.ocir.io/juva2oca/"` and `CONTAINER_NAME="thuistest"`, with the remaining variables listed above. Quote values containing special characters. Keep credentials private (`chmod 600 .env`). Values in `.env` override existing environment values; without the file, scripts use the calling environment. `REGISTRY_PWD` is a legacy setting and is not used by the database installer for login.
 
-2. **Run the Script**: From the project root, run the following commands. The wrapper uses relative paths, so it must run from `build`. Ensure Docker is running and you have permission to invoke Docker commands.
+2. **Run the Script**: Ensure Docker is running, then run from the project root:
 
    ```bash
-   cd build
-   bash startContainer.sh
+   ./start_container.sh
    ```
+
+   `start_container.sh` is the executable entrypoint. It invokes the non-executable `maak_container_free` installer through Bash.
+
+   The installer, wrapper, image publisher, and cleanup helper automatically load the root `.env`, regardless of the current working directory. Image publishing also uses its shared `CONTAINER_NAME`.
 
 3. **Access APEX**: When APEX and ORDS are enabled and installation completes, Oracle APEX can be accessed at `http://localhost:8080/ords/apex`. Log in using the APEX admin credentials you specified.
 
 4. **Database Connection and Logs**: Use the connection command shown by the installer and enter `SYS_PWD` when SQL*Plus prompts. Passwords are not printed. The installer redacts literal occurrences of configured secret values in its output, including upstream error messages. The wrapper removes the previous `build/install.log` and records new output there using `tee`. It does not enforce mode `600`; permissions depend on your current umask. To restrict access to newly created logs, run `umask 077` before starting the wrapper.
 
 Credentials previously stored in scripts or installation logs should be rotated through their respective registry/database administrators. Updating these scripts does not rotate existing credentials or sanitize historical copies and logs. Demo-account passwords and network settings are separate configuration concerns.
+
+The local `build/maak_k8s_image.sh` and `build/cleanup_docker.sh` scripts use `REGISTRY` from `.env` for destination image references. Both accept the prefix with or without a trailing slash. The Oracle database source image continues to use `container-registry.oracle.com`.
 
 ## Troubleshooting
 

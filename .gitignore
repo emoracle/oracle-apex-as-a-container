@@ -18,4 +18,5 @@
 /build
 /dist
 
-startContainer.sh
+# Local configuration and credentials
+/.env

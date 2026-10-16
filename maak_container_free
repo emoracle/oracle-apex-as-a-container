@@ -89,6 +89,22 @@ redact_output() {
   done
 }
 
+# Existing containers keep their original port publications when restarted.
+require_loopback_ports() {
+  local bindings host_ip
+  bindings=$(docker inspect --format '{{printf "network:%s\npublish-all:%t\n" .HostConfig.NetworkMode .HostConfig.PublishAllPorts}}{{range .HostConfig.PortBindings}}{{range .}}{{printf "binding:%s\n" .HostIp}}{{end}}{{end}}' "$CONTAINER_NAME") || \
+    die "Could not inspect existing container port bindings."
+  [[ -n "$bindings" ]] || return 0
+  while IFS= read -r host_ip; do
+    case "$host_ip" in
+      network:host|network:container:*|publish-all:true)
+        die "Existing container uses shared networking or automatic port publishing. Recreate it with loopback bindings after safeguarding its database data." ;;
+      network:*|publish-all:false|binding:127.0.0.1|binding:::1) ;;
+      *) die "Existing container publishes ports outside loopback. Recreate it with loopback bindings after safeguarding its database data." ;;
+    esac
+  done <<< "$bindings"
+}
+
 run_installation() (
 #-------------------------------------------------------------------------------------------------------------
 # Main script 
@@ -139,13 +155,15 @@ docker pull container-registry.oracle.com/database/free:latest
 # We start the container and check on availability
 
 if docker ps --filter "name=^/${CONTAINER_NAME}$" --filter "status=running" --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+  require_loopback_ports
   echo "Container $CONTAINER_NAME is already running."
 elif docker ps -a --filter "name=^/${CONTAINER_NAME}$" --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+  require_loopback_ports
   echo "Container $CONTAINER_NAME exists but is stopped. Starting it now..."
   docker start "$CONTAINER_NAME" >/dev/null
 else
   echo "Container $CONTAINER_NAME is not running. Starting it now..."
-  docker run -d -it --name "$CONTAINER_NAME" -p 1521:1521 -p 8080:8080 -p 8443:8443 -e "ORACLE_PWD=$SYS_PWD" container-registry.oracle.com/database/free:latest >/dev/null
+  docker run -d -it --name "$CONTAINER_NAME" -p 127.0.0.1:1521:1521 -p 127.0.0.1:8080:8080 -p 127.0.0.1:8443:8443 -e "ORACLE_PWD=$SYS_PWD" container-registry.oracle.com/database/free:latest >/dev/null
 fi
 
 COUNTER=0

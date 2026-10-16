@@ -41,6 +41,8 @@ This script automates the deployment and configuration of an Oracle Database con
 
 3. **Access APEX**: When APEX and ORDS are enabled and installation completes, Oracle APEX can be accessed at `http://localhost:8080/ords/apex`. Log in using the APEX admin credentials you specified.
 
+   New containers bind ports 1521, 8080 and 8443 to `127.0.0.1` on the Docker host only. Existing containers with non-loopback bindings, automatic port publishing or host/shared-container networking are rejected before reuse or startup. Docker cannot change these bindings with a restart: safeguard the database data before recreating such a container. Remote access requires a separately secured setup with HTTPS; the HTTP endpoint is intended for local use.
+
 4. **Database Connection and Logs**: Use the connection command shown by the installer and enter `SYS_PWD` when SQL*Plus prompts. Passwords are not printed. The installer redacts literal occurrences of configured secret values in its output, including upstream error messages. The wrapper removes the previous `build/install.log` and records new output there using `tee`. It does not enforce mode `600`; permissions depend on your current umask. To restrict access to newly created logs, run `umask 077` before starting the wrapper.
 
 Credentials previously stored in scripts or installation logs should be rotated through their respective registry/database administrators. Updating these scripts does not rotate existing credentials or sanitize historical copies and logs. Demo-account passwords and network settings are separate configuration concerns.

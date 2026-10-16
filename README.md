@@ -27,7 +27,7 @@ This script automates the deployment and configuration of an Oracle Database con
 
 ## Usage
 
-1. **Configure `.env`**: Shared settings and credentials live in `.env` at the project root, beside `maak_container_free`. This file is excluded from Git. Use Bash assignments such as `REGISTRY="fra.ocir.io/juva2oca/"` and `CONTAINER_NAME="thuistest"`, with the remaining variables listed above. Quote values containing special characters. Keep credentials private (`chmod 600 .env`). Values in `.env` override existing environment values; without the file, scripts use the calling environment. `REGISTRY_PWD` is a legacy setting and is not used by the database installer for login.
+1. **Configure `.env`**: Copy the committed template with `cp .env.sample .env`, run `chmod 600 .env`, and replace all dummy values with your own settings. Shared settings and credentials live in `.env` at the project root, beside `maak_container_free`. This file is excluded from Git. Use Bash assignments such as `REGISTRY="fra.ocir.io/juva2oca/"` and `CONTAINER_NAME="thuistest"`, with the remaining variables listed above. Quote values containing special characters. Keep credentials private (`chmod 600 .env`). Values in `.env` override existing environment values; without the file, scripts use the calling environment. `REGISTRY_PWD` is a legacy setting and is not used by the database installer for login.
 
 2. **Run the Script**: Ensure Docker is running, then run from the project root:
 
